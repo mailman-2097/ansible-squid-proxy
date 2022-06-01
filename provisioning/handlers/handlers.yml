@@ -1,0 +1,8 @@
+---
+- name: reload squid
+  ansible.builtin.shell: "squid -k reconfigure"
+  when:
+    - not ansible_check_mode | bool
+  register: reload_squid_output
+- debug:
+    var: reload_squid_output

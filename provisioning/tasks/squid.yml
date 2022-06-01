@@ -1,0 +1,83 @@
+---
+- name: Get all groups
+  getent:
+    database: group
+    split: ":"
+- debug:
+    var: ansible_facts.getent_group
+
+- name: create group
+  ansible.builtin.group:
+    name: "{{ squid_group }}"
+    system: yes
+    state: present
+
+
+- name: Get squid user details
+  getent:
+    database: passwd
+    key: "{{ squid_user }}"
+  register: get_user_details_output
+- debug:
+    var: get_user_details_output
+
+- name: create user
+  ansible.builtin.user:
+    name: "{{ squid_user }}"
+    group: "{{ squid_group }}"
+    create_home: no
+    state: present
+    home: /var/spool/squid
+    shell: /sbin/nologin
+    system: yes 
+
+  register: create_user_output
+- debug:
+    var: create_user_output
+
+- name: Install the latest version of Squid
+  ansible.builtin.package:
+    name: "{{ squid_packages }}"
+    state: present
+  register: install_package_output
+- debug:
+    var: install_package_output
+
+# - name: Make sure a squid service is NOT running
+#   ansible.builtin.systemd:
+#     name: squid
+#     state: stopped
+
+- name: create cache directory
+  ansible.builtin.file:
+    path: /var/spool/squid
+    state: directory
+    owner: "{{ squid_user }}"
+    group: "{{ squid_group }}"
+    mode: "0750"
+
+- name: flush_handlers
+  ansible.builtin.meta: flush_handlers
+
+- name: Backup squid config file
+  ansible.builtin.copy:
+    src: "{{ squid_config_directory }}/{{ squid_config_file }}"
+    dest: "{{ squid_config_directory }}/{{ squid_config_file_backup }}"
+    owner: "{{ squid_user }}"
+    group: "{{ squid_group }}"
+    mode: "0400"
+    remote_src: yes
+
+- name: configure squid
+  ansible.builtin.template:
+    src: "templates/{{ squid_config_file }}.j2"
+    dest: "{{ squid_config_directory }}/{{ squid_config_file }}"
+    mode: "0644"
+    owner: "{{ squid_user }}"
+    group: "{{ squid_group }}"
+    validate: squid -k parse -f %s
+  notify:
+    - reload squid
+  register: configure_squid_output
+- debug:
+    var: configure_squid_output
